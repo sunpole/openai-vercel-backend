@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Проверка OpenAI Backend</title>
+  <style>
+    body { font-family: sans-serif; margin: 40px;}
+    #log { background: #eee; padding: 16px; min-height: 120px; }
+    .ok {color:green;}
+    .fail {color:red;}
+    button {font-size:16px; padding:8px 20px;}
+  </style>
+</head>
+<body>
+  <h2>Проверка OpenAI backend</h2>
+  <button id="btn" onclick="runChecks()">Запустить диагностику</button>
+  <div id="log"></div>
+  <script>
+    async function runChecks() {
+      document.getElementById('log').innerHTML = "";
+      const log = (msg, ok) => {
+        let out = `<div class="${ok===true?'ok':ok===false?'fail':''}">${msg}</div>`;
+        document.getElementById('log').innerHTML += out;
+      };
+
+      log('1. Проверка доступности сайта OpenAI...', null);
+      try {
+        // Доступность сайта openai.com (через fetch без ожидания какого-либо CORS-ответа)
+        await fetch("https://openai.com/", {mode:"no-cors"});
+        log('   ✔️ openai.com доступен с вашего устройства', true);
+      } catch (e) {
+        log('   ❌ Не удалось подключиться к openai.com. Возможно, нужен VPN!', false);
+        return;
+      }
+
+      log('2. Проверка healthcheck на backend...', null);
+      let backendUrl = 'https://openai-vercel-backend.vercel.app/api/healthcheck';
+      let backendResp;
+      try {
+        let resp = await fetch(backendUrl);
+        backendResp = await resp.json();
+        if (backendResp.status === "ok") {
+          log('   ✔️ Healthcheck OK: API-ключ работает, OpenAI отвечает', true);
+        } else {
+          log('   ❌ Healthcheck ответил ошибкой: ' + (backendResp.message||"Неизвестно"), false);
+          return;
+        }
+      } catch (e) {
+        log('   ❌ Не удалось подключиться к /api/healthcheck. Проверьте URL или попробуйте с VPN.', false);
+        return;
+      }
+
+      log('3. Проверка отправки основного запроса на /api/chat...', null);
+      try {
+        let resp = await fetch('https://openai-vercel-backend.vercel.app/api/chat', {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({prompt: "ping"})
+        });
+        let data = await resp.json();
+        if (data.choices && Array.isArray(data.choices)) {
+          log('   ✔️ /api/chat работает корректно, OpenAI возвращает ответ', true);
+        } else if (data.error) {
+          log('   ❌ /api/chat ответил ошибкой: ' + data.error, false);
+        } else {
+          log('   ❌ Неожиданный ответ от /api/chat', false);
+        }
+      } catch (e) {
+        log('   ❌ Не удалось отправить запрос на /api/chat', false);
+      }
+
+      log('Диагностика завершена! Если где-то ❌ — попробуйте VPN или обратитесь к администратору.', null);
+    }
+  </script>
+</body>
+</html>
